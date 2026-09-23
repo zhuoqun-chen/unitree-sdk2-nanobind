@@ -1,0 +1,68 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+jobs:
+  # Fast feedback: stub wheel (no robot/DDS), uv-native, run the suite.
+  stub-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: false  # no uv.lock in this repo
+      - name: Build stub wheel + test (uv-native)
+        run: |
+          uv build --wheel -o dist -C cmake.define.USE_STUB_SDK=ON
+          uv run --no-project --with dist/*.whl --with pytest --with numpy pytest tests/ -v
+
+  # Distributable abi3 wheels for both variants, x86_64 + aarch64.
+  wheels:
+    needs: stub-test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [real, stub]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true  # SDK for the real build (no-op cost for stub)
+      - name: Set up QEMU (aarch64 emulation)
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+          cache-image: false  # both matrix jobs race on the same binfmt cache key
+      - name: Configure stub variant
+        if: matrix.variant == 'stub'
+        run: |
+          sed -i 's/^version = "\(.*\)"$/version = "\1+stub"/' pyproject.toml
+          echo "CIBW_CONFIG_SETTINGS=cmake.define.USE_STUB_SDK=ON" >> "$GITHUB_ENV"
+      - uses: pypa/cibuildwheel@v4.1.0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.variant }}-${{ github.run_id }}
+          path: wheelhouse/*.whl
+
+  # On a published Release, attach every wheel (real + stub, both arches) as
+  # Release assets.
+  publish:
+    needs: wheels
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    permissions:
+      contents: write  # upload release assets
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - run: gh release upload "${{ github.event.release.tag_name }}" dist/*.whl --clobber --repo "${{ github.repository }}"
+        env:
+          GH_TOKEN: ${{ github.token }}

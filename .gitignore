@@ -1,0 +1,19 @@
+# Build
+/build/
+/dist/
+/wheelhouse/
+*.so
+*.egg-info/
+_skbuild/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editors
+.vscode/
+.idea/

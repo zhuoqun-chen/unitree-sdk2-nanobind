@@ -1,0 +1,62 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.5"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "unitree-sdk2-bind"
+version = "0.1.0"
+description = "nanobind bindings for the Unitree SDK2 unitree_hg (G1) low-level API, with a Python Stable ABI (abi3) wheel"
+# nanobind's Stable ABI support needs CPython >= 3.12; one cp312-abi3 wheel
+# then serves every later CPython.
+requires-python = ">=3.12"
+license = { text = "BSD-3-Clause" }
+keywords = ["unitree", "g1", "dds", "robotics", "nanobind", "sim2real"]
+classifiers = [
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: C++",
+  "Operating System :: POSIX :: Linux",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = ["numpy>=1.23"]
+
+[project.urls]
+Homepage = "https://github.com/zhuoqun-chen/unitree-sdk2-nanobind"
+Issues = "https://github.com/zhuoqun-chen/unitree-sdk2-nanobind/issues"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["src/unitree_sdk2_bind"]
+# Tag the wheel abi3 (pairs with STABLE_ABI in CMakeLists.txt).
+wheel.py-api = "cp312"
+
+[tool.scikit-build.cmake.define]
+# Hardware-free build against the bundled stub SDK:
+#   pip install . -C cmake.define.USE_STUB_SDK=ON
+USE_STUB_SDK = "OFF"
+
+[tool.cibuildwheel]
+# One Python is enough: the abi3 wheel covers every later CPython.
+build = "cp312-*"
+# The SDK ships glibc-only prebuilt libs, so no musllinux.
+skip = "*-musllinux*"
+build-frontend = "build"
+build-verbosity = 1
+
+[tool.cibuildwheel.linux]
+# Build on manylinux_2_28 but tag manylinux_2_31: the SDK's bundled libddscxx
+# needs GLIBCXX_3.4.26, which auditwheel maps to the 2_31 policy. Only the
+# arches the SDK ships.
+archs = ["x86_64", "aarch64"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+repair-wheel-command = "auditwheel repair --plat manylinux_2_31_$(uname -m) -w {dest_dir} {wheel}"
+environment = { UNITREE_SDK2_ROOT = "/project/third_party/unitree_sdk2" }
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests", "examples"]
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B"]
